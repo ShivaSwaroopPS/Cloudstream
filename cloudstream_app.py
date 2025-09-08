@@ -7,7 +7,6 @@ from datetime import datetime
 import os
 import pytz
 import numpy as np
-import signal
 import sys
 
 # === CONFIG ===
@@ -109,7 +108,7 @@ def autosave_loop():
         save_data(output_folder, autosave=True)
 
 
-# === DASHBOARD THREAD ===
+# === DASHBOARD THREAD (CLI only) ===
 def dashboard_loop():
     while True:
         time.sleep(DASHBOARD_INTERVAL)
@@ -252,95 +251,88 @@ def connect_to_stream():
     ws.run_forever(ping_interval=30, ping_timeout=10)
 
 
-# === SIGNAL HANDLING ===
-# === SIGNAL HANDLING ===
-def handle_exit(sig, frame):
-    print("\n🛑 Ctrl+C detected → Saving data before exit...")
-    save_data(output_folder)
-    sys.exit(0)
-
-
+# === CLI MODE ONLY ===
 if __name__ == "__main__" and "streamlit" not in sys.modules:
     import signal
+    def handle_exit(sig, frame):
+        print("\n🛑 Ctrl+C detected → Saving data before exit...")
+        save_data(output_folder)
+        sys.exit(0)
     signal.signal(signal.SIGINT, handle_exit)
 
     print("🚀 Starting CloudStream Collector (press Ctrl+C to stop)...")
-
-    # Kick off auto-save and dashboard threads
     threading.Thread(target=autosave_loop, daemon=True).start()
     threading.Thread(target=dashboard_loop, daemon=True).start()
-
     connect_to_stream()
 
 
-
-if __name__ == "__main__":
-    print("🚀 Starting CloudStream Collector (press Ctrl+C to stop)...")
-
-    # Kick off auto-save and dashboard threads
-    threading.Thread(target=autosave_loop, daemon=True).start()
-    threading.Thread(target=dashboard_loop, daemon=True).start()
-
-    connect_to_stream()
 # === STREAMLIT UI ===
 try:
     import streamlit as st
 except ImportError:
-    print("⚠️ Streamlit not installed. Run: pip install streamlit")
-    sys.exit(1)
+    st = None
 
-# Global flags for Streamlit
-if "collector_thread" not in st.session_state:
-    st.session_state.collector_thread = None
-if "is_running" not in st.session_state:
-    st.session_state.is_running = False
-
-def start_collector():
-    if not st.session_state.is_running:
-        st.session_state.is_running = True
-        t = threading.Thread(target=connect_to_stream, daemon=True)
-        t.start()
-        st.session_state.collector_thread = t
-
-def stop_collector():
-    if st.session_state.is_running:
+if st:
+    # Session flags
+    if "collector_thread" not in st.session_state:
+        st.session_state.collector_thread = None
+    if "is_running" not in st.session_state:
         st.session_state.is_running = False
-        # Trigger manual save
+
+    def start_collector():
+        if not st.session_state.is_running:
+            st.session_state.is_running = True
+            t = threading.Thread(target=connect_to_stream, daemon=True)
+            t.start()
+            st.session_state.collector_thread = t
+
+    def stop_collector():
+        if st.session_state.is_running:
+            st.session_state.is_running = False
+            save_data(output_folder)
+            st.success("💾 Data saved and collector stopped.")
+
+    def download_data():
         save_data(output_folder)
-        st.success("💾 Data saved and collector stopped.")
+        st.success("✅ Data exported. Click to download:")
 
-def download_data():
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_data(output_folder)
-    st.success(f"✅ Data exported at {output_folder}")
-    for f in os.listdir(output_folder):
-        if f.endswith(".xlsx") or f.endswith(".parquet"):
-            with open(os.path.join(output_folder, f), "rb") as file:
-                st.download_button(f"⬇️ Download {f}", file, file_name=f)
+        for f in os.listdir(output_folder):
+            if f.endswith(".xlsx") or f.endswith(".parquet"):
+                filepath = os.path.join(output_folder, f)
+                with open(filepath, "rb") as file:
+                    st.download_button(
+                        f"⬇️ Download {f}",
+                        file,
+                        file_name=f,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        if f.endswith(".xlsx")
+                        else "application/octet-stream",
+                    )
 
-# === UI Layout ===
-st.title("⚡ CloudStream Collector")
+    # === UI Layout ===
+    st.title("⚡ CloudStream Collector")
 
-col1, col2, col3 = st.columns(3)
-if col1.button("▶️ Start Collector"):
-    start_collector()
-if col2.button("⏹️ Stop Collector"):
-    stop_collector()
-if col3.button("💾 Download Data"):
-    download_data()
+    col1, col2, col3 = st.columns(3)
+    if col1.button("▶️ Start Collector"):
+        start_collector()
+    if col2.button("⏹️ Stop Collector"):
+        stop_collector()
+    if col3.button("💾 Download Data"):
+        download_data()
 
-st.write("Running:", st.session_state.is_running)
+    st.write("Running:", st.session_state.is_running)
 
-# Live counters
-if st.session_state.is_running:
-    st.info("Collector is running...")
-    st.write("📊 Live Dashboard")
-    for stream, data in streams.items():
-        if not data.get("subscribed", False):
-            continue
-        c = data["counters"]
-        st.write(f"{stream}: Trades={c['trade']} | Orders={c['order']} | "
-                 f"Instruments={c['instrument']} | Settlements={c['settlement']} | "
-                 f"MarketData={c['market_data']}")
-else:
-    st.warning("Collector is stopped.")
+    if st.session_state.is_running:
+        st.info("Collector is running...")
+        st.write("📊 Live Dashboard")
+        for stream, data in streams.items():
+            if not data.get("subscribed", False):
+                continue
+            c = data["counters"]
+            st.write(
+                f"{stream}: Trades={c['trade']} | Orders={c['order']} | "
+                f"Instruments={c['instrument']} | Settlements={c['settlement']} | "
+                f"MarketData={c['market_data']}"
+            )
+    else:
+        st.warning("Collector is stopped.")
