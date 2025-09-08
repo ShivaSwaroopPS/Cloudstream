@@ -269,21 +269,22 @@ if __name__ == "__main__" and "streamlit" not in sys.modules:
 # === STREAMLIT UI ===
 try:
     import streamlit as st
-    from streamlit_autorefresh import st_autorefresh
 except ImportError:
     st = None
 
 if st:
-    import io
-
+    # Session flags
     if "collector_thread" not in st.session_state:
         st.session_state.collector_thread = None
     if "is_running" not in st.session_state:
         st.session_state.is_running = False
+    if "start_time" not in st.session_state:
+        st.session_state.start_time = None
 
     def start_collector():
         if not st.session_state.is_running:
             st.session_state.is_running = True
+            st.session_state.start_time = datetime.utcnow()
             t = threading.Thread(target=connect_to_stream, daemon=True)
             t.start()
             st.session_state.collector_thread = t
@@ -294,8 +295,10 @@ if st:
             save_data(output_folder)
             st.success("💾 Data saved and collector stopped.")
 
+    import io
+
     def download_data():
-        st.success("✅ Data exported. Click below to download files:")
+        st.success("✅ Data exported. Click to download:")
 
         for stream, stream_data in streams.items():
             if not stream_data.get("subscribed", False):
@@ -314,6 +317,7 @@ if st:
                 dfs["MarketData"] = pd.DataFrame(stream_data["market_data"])
 
             if dfs:
+                # Build Excel file in memory
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                     for sheet_name, df in dfs.items():
@@ -322,7 +326,7 @@ if st:
 
                 st.download_button(
                     label=f"⬇️ Download {stream}.xlsx",
-                    data=buffer.getvalue(),
+                    data=buffer,
                     file_name=f"{stream}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
@@ -340,12 +344,9 @@ if st:
 
     st.write("Running:", st.session_state.is_running)
 
-    # Auto-refresh UI every 5s
-    st_autorefresh(interval=5000, limit=None, key="refresh")
-
     if st.session_state.is_running:
         st.info("Collector is running...")
-        st.subheader("📊 Live Dashboard")
+        st.write("📊 Live Dashboard")
         for stream, data in streams.items():
             if not data.get("subscribed", False):
                 continue
@@ -355,27 +356,25 @@ if st:
                 f"Instruments={c['instrument']} | Settlements={c['settlement']} | "
                 f"MarketData={c['market_data']}"
             )
-    # === STATUS BLOCK ===
-    if "start_time" not in st.session_state and st.session_state.is_running:
-        st.session_state.start_time = datetime.utcnow()
 
-    if st.session_state.get("start_time"):
-        st.subheader("🕒 Collection Status")
+        # === STATUS BLOCK ===
+        if st.session_state.start_time:
+            st.subheader("🕒 Collection Status")
 
-        start_utc = st.session_state.start_time.replace(tzinfo=pytz.UTC)
-        start_gmt = start_utc.astimezone(pytz.timezone("Etc/GMT"))
-        start_ist = start_utc.astimezone(pytz.timezone("Asia/Kolkata"))
-        start_mst = start_utc.astimezone(pytz.timezone("US/Mountain"))
+            start_utc = st.session_state.start_time.replace(tzinfo=pytz.UTC)
+            start_gmt = start_utc.astimezone(pytz.timezone("Etc/GMT"))
+            start_ist = start_utc.astimezone(pytz.timezone("Asia/Kolkata"))
+            start_mst = start_utc.astimezone(pytz.timezone("US/Mountain"))
 
-        st.write(f"✅ Collection started at:")
-        st.write(f"- GMT : {start_gmt.strftime('%Y-%m-%d %H:%M:%S')}")
-        st.write(f"- UTC : {start_utc.strftime('%Y-%m-%d %H:%M:%S')}")
-        st.write(f"- IST : {start_ist.strftime('%Y-%m-%d %H:%M:%S')}")
-        st.write(f"- MST : {start_mst.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write("✅ Collection started at:")
+            st.write(f"- GMT : {start_gmt.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write(f"- UTC : {start_utc.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write(f"- IST : {start_ist.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write(f"- MST : {start_mst.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        st.write("🌍 Subscribed Streams:")
-        for stream in streams.keys():
-            st.write(f"- {stream}")
-            
+            st.write("🌍 Subscribed Streams:")
+            for stream in streams.keys():
+                st.write(f"- {stream}")
+
     else:
         st.warning("Collector is stopped.")
