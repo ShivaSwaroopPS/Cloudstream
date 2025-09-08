@@ -253,13 +253,25 @@ def connect_to_stream():
 
 
 # === SIGNAL HANDLING ===
+# === SIGNAL HANDLING ===
 def handle_exit(sig, frame):
     print("\n🛑 Ctrl+C detected → Saving data before exit...")
     save_data(output_folder)
     sys.exit(0)
 
 
-signal.signal(signal.SIGINT, handle_exit)
+if __name__ == "__main__" and "streamlit" not in sys.modules:
+    import signal
+    signal.signal(signal.SIGINT, handle_exit)
+
+    print("🚀 Starting CloudStream Collector (press Ctrl+C to stop)...")
+
+    # Kick off auto-save and dashboard threads
+    threading.Thread(target=autosave_loop, daemon=True).start()
+    threading.Thread(target=dashboard_loop, daemon=True).start()
+
+    connect_to_stream()
+
 
 
 if __name__ == "__main__":
