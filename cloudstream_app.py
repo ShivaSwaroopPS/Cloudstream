@@ -273,6 +273,9 @@ except ImportError:
     st = None
 
 if st:
+    import io
+    from streamlit_autorefresh import st_autorefresh
+
     # Session flags
     if "collector_thread" not in st.session_state:
         st.session_state.collector_thread = None
@@ -295,10 +298,8 @@ if st:
             save_data(output_folder)
             st.success("💾 Data saved and collector stopped.")
 
-    import io
-
     def download_data():
-        st.success("✅ Data exported. Click to download:")
+        st.success("✅ Data exported. Click below to download:")
 
         for stream, stream_data in streams.items():
             if not stream_data.get("subscribed", False):
@@ -317,7 +318,7 @@ if st:
                 dfs["MarketData"] = pd.DataFrame(stream_data["market_data"])
 
             if dfs:
-                # Build Excel file in memory
+                # Create a fresh buffer for each stream
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                     for sheet_name, df in dfs.items():
@@ -326,7 +327,7 @@ if st:
 
                 st.download_button(
                     label=f"⬇️ Download {stream}.xlsx",
-                    data=buffer,
+                    data=buffer.getvalue(),
                     file_name=f"{stream}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
@@ -344,9 +345,13 @@ if st:
 
     st.write("Running:", st.session_state.is_running)
 
+    # Auto-refresh UI every 5 seconds if running
     if st.session_state.is_running:
+        st_autorefresh(interval=5000, limit=None, key="dashboard_refresh")
         st.info("Collector is running...")
-        st.write("📊 Live Dashboard")
+
+        # Live dashboard
+        st.subheader("📊 Live Dashboard")
         for stream, data in streams.items():
             if not data.get("subscribed", False):
                 continue
@@ -357,7 +362,7 @@ if st:
                 f"MarketData={c['market_data']}"
             )
 
-        # === STATUS BLOCK ===
+        # Status block
         if st.session_state.start_time:
             st.subheader("🕒 Collection Status")
 
