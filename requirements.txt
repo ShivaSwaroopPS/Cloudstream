@@ -1,0 +1,6 @@
+streamlit
+websocket-client
+pandas
+numpy
+pytz
+xlsxwriter
