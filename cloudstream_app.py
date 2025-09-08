@@ -294,40 +294,40 @@ if st:
 
     import io
 
-def download_data():
-    st.success("✅ Data exported. Click to download:")
+    def download_data():
+        st.success("✅ Data exported. Click to download:")
 
-    for stream, stream_data in streams.items():
-        if not stream_data.get("subscribed", False):
-            continue
+        for stream, stream_data in streams.items():
+            if not stream_data.get("subscribed", False):
+                continue
 
-        dfs = {}
-        if stream_data["trade"]:
-            dfs["Trade"] = pd.DataFrame(stream_data["trade"])
-        if stream_data["order"]:
-            dfs["Order"] = pd.DataFrame(stream_data["order"])
-        if stream_data["settlement"]:
-            dfs["Settlement"] = pd.DataFrame(stream_data["settlement"])
-        if stream_data["instrument"]:
-            dfs["Instrument"] = pd.DataFrame(stream_data["instrument"])
-        if stream_data["market_data"]:
-            dfs["MarketData"] = pd.DataFrame(stream_data["market_data"])
+            dfs = {}
+            if stream_data["trade"]:
+                dfs["Trade"] = pd.DataFrame(stream_data["trade"])
+            if stream_data["order"]:
+                dfs["Order"] = pd.DataFrame(stream_data["order"])
+            if stream_data["settlement"]:
+                dfs["Settlement"] = pd.DataFrame(stream_data["settlement"])
+            if stream_data["instrument"]:
+                dfs["Instrument"] = pd.DataFrame(stream_data["instrument"])
+            if stream_data["market_data"]:
+                dfs["MarketData"] = pd.DataFrame(stream_data["market_data"])
 
-        if dfs:
-            # Build Excel file in memory
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                for sheet_name, df in dfs.items():
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-            buffer.seek(0)
+            if dfs:
+                # Build Excel file in memory
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                    for sheet_name, df in dfs.items():
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
+                buffer.seek(0)
 
-            # One button per stream
-            st.download_button(
-                label=f"⬇️ Download {stream}.xlsx",
-                data=buffer,
-                file_name=f"{stream}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+                # One button per stream
+                st.download_button(
+                    label=f"⬇️ Download {stream}.xlsx",
+                    data=buffer,
+                    file_name=f"{stream}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
 
     # === UI Layout ===
     st.title("⚡ CloudStream Collector")
